@@ -1,0 +1,85 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: agriflow-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${DB_PORT}:5432" # Disabled for Production Security
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: agriflow-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+    expose:
+      - "80"
+    ports:
+      - "${PGADMIN_PORT}:80"
+    depends_on:
+      - db
+
+  nginx:
+    image: nginx:alpine
+    container_name: agriflow-gateway
+    ports:
+      - "${NGINX_PORT}:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - frontend
+      - backend
+      - pgadmin
+
+  backend:
+    build: ./backend
+    container_name: agriflow-backend
+    expose:
+      - "4001"
+    ports:
+      - "4002:4001"
+    environment:
+      - DB_HOST=db
+      - DB_PASS=${POSTGRES_PASSWORD}
+      - IPFS_API=${IPFS_API}
+    depends_on:
+      - db
+    volumes:
+      - ./backend:/app
+      - ./simulation_db:/simulation_db
+
+  frontend:
+    build: ./frontend
+    container_name: agriflow-frontend
+    expose:
+      - "5173"
+    ports:
+      - "${FRONTEND_PORT}:5173"
+    environment:
+      - VITE_API_URL=/api # Relative path for Nginx
+      - VITE_BACKEND_URL=http://backend:4001
+    depends_on:
+      - backend
+
+  ipfs:
+    image: ipfs/kubo:latest
+    container_name: agriflow-ipfs
+    ports:
+      - "5001:5001" # API Port
+      - "8080:8080" # Gateway Port
+      - "4001:4001" # P2P Port
+    volumes:
+      - ipfs_data:/data/ipfs
+      - ipfs_staging:/export
+
+volumes:
+  pgdata:
+  ipfs_data:
+  ipfs_staging:
